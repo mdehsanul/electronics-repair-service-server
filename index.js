@@ -3,10 +3,12 @@ const bodyParser = require("body-parser");
 const cors = require("cors");
 const ObjectID = require("mongodb").ObjectID;
 require("dotenv").config();
+const stripe = require("stripe")(process.env.STRIPE_SECRET_TEST);
 
 const app = express();
 app.use(bodyParser.json());
 app.use(cors());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 app.get("/", (req, res) => {
   res.send("Hello World!");
@@ -32,10 +34,6 @@ client.connect((err) => {
   const reviewCollection = client
     .db("electronic-repair-service")
     .collection("review");
-
-  const statusCollection = client
-    .db("electronic-repair-service")
-    .collection("status");
 
   // create
   app.post("/addService", (req, res) => {
@@ -123,6 +121,46 @@ client.connect((err) => {
     reviewCollection.find().toArray((err, documents) => {
       res.send(documents);
     });
+  });
+
+  // Update Status Change
+  app.patch("/updateOrderStatus/:id", (req, res) => {
+    console.log(req.body.status);
+    console.log(ObjectID(req.params.id));
+    orderCollection
+      .updateOne(
+        { _id: ObjectID(req.params.id) },
+        { $set: { status: req.body.status } }
+      )
+      .then((result) => {
+        res.send(result.modifiedCount > 0);
+        // console.log(result);
+      });
+  });
+
+  // Payment
+  app.post("/payment", cors(), async (req, res) => {
+    let { amount, id } = req.body;
+    try {
+      const payment = await stripe.paymentIntents.create({
+        amount,
+        currency: "USD",
+        description: "Electronics Repair Service",
+        payment_method: id,
+        confirm: true,
+      });
+      console.log("Payment", payment);
+      res.json({
+        message: "Payment Successful",
+        success: true,
+      });
+    } catch (error) {
+      console.log("Error", error);
+      res.json({
+        message: "Payment Failed",
+        success: false,
+      });
+    }
   });
 });
 
